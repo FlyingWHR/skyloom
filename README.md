@@ -1,15 +1,15 @@
-# SkyLoom (天织)
+# SkyLoom
 
-A 3D web-based sandbox game where players build floating islands using elemental powers derived from Chinese cosmology (wood, fire, earth, metal, water), enhanced by futuristic technology. The game features a "Neo-Xianxia" art style blending clean, minimalist sci-fi aesthetics with traditional Chinese motifs.
+A 3D web-based sandbox game where players build floating islands using elemental powers. Create your own skyborne worlds with a unique building system based on five core elements, all enhanced by modern technology within an immersive environment.
 
-![SkyLoom](https://github.com/yourusername/skyloom/raw/main/public/screenshot.png)
+![SkyLoom](public/images/screenshot.png)
 
 ## Features
 
 - **Immersive 3D Environment**: Built with Three.js and React for a fluid, interactive experience
-- **Elemental Building System**: Create with five elements from Chinese cosmology
+- **Elemental Building System**: Create using five core elements with unique properties
 - **Fluid Controls**: Graceful camera movements with intuitive navigation
-- **Neo-Xianxia Aesthetics**: Blend of traditional Chinese design with futuristic elements
+- **Modern Aesthetics**: Clean, minimalist design with a focus on visual harmony
 
 ## Technical Stack
 
@@ -97,6 +97,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Inspired by Chinese cosmology and Xianxia novels
 - Built with the amazing [Three.js](https://threejs.org/) library
 - UI components powered by [React](https://reactjs.org/)

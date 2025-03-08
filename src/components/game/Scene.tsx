@@ -5,10 +5,11 @@ import { Player } from './Player'
 import { BuildingSystem } from './BuildingSystem'
 
 interface SceneProps {
-  setMenuOpen: (isOpen: boolean) => void
+  setMenuOpen: (isOpen: boolean) => void;
+  menuOpen: boolean;
 }
 
-export const Scene = ({ setMenuOpen }: SceneProps) => {
+export const Scene = ({ setMenuOpen, menuOpen }: SceneProps) => {
   return (
     <Canvas style={{ width: '100%', height: '100%' }}>
       {/* Strong lighting */}
@@ -25,7 +26,7 @@ export const Scene = ({ setMenuOpen }: SceneProps) => {
       <BuildingSystem />
       
       {/* Player controls */}
-      <Player setMenuOpen={setMenuOpen} />
+      <Player setMenuOpen={setMenuOpen} menuOpen={menuOpen} />
     </Canvas>
   )
 } 

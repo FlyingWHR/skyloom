@@ -1,20 +1,55 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { usePlayerControls } from '../../hooks/usePlayerControls'
 import { useBuildingStore } from '../../systems/building/buildingState'
 
-export const Player = ({ setMenuOpen }: { setMenuOpen: (isOpen: boolean) => void }) => {
+export const Player = ({ setMenuOpen, menuOpen }: { setMenuOpen: (isOpen: boolean) => void, menuOpen: boolean }) => {
   const { camera } = useThree()
   const velocity = useRef(new THREE.Vector3())
   const position = useRef(new THREE.Vector3(0, 10, 20))
   const playerMeshRef = useRef<THREE.Group>(null)
+  const menuJustClosedRef = useRef(false)
+  const isManuallyClosingMenuRef = useRef(false)
   
   const keys = usePlayerControls()
   const { isBuilding } = useBuildingStore()
   
   // State to track if we should lock the pointer (not needed in building mode)
   const shouldLockPointer = useRef(!isBuilding)
+  
+  // Create a reliable pointer lock helper
+  const grabMousePointer = useCallback(() => {
+    if (isBuilding) return // Don't grab in building mode
+    
+    const canvas = document.querySelector('canvas')
+    if (!canvas || document.pointerLockElement === canvas) return
+    
+    // Set this flag to prevent toggle loop
+    isManuallyClosingMenuRef.current = true
+    
+    // Try multiple times to ensure it works
+    const attemptLock = () => {
+      try {
+        canvas.requestPointerLock()
+      } catch (e) {
+        console.error("Failed to lock pointer:", e)
+      }
+    }
+    
+    // Try immediately
+    attemptLock()
+    
+    // And also with a delay as backup
+    setTimeout(attemptLock, 50)
+    setTimeout(attemptLock, 100)
+    setTimeout(attemptLock, 200)
+    
+    // Clear the flag after all attempts
+    setTimeout(() => {
+      isManuallyClosingMenuRef.current = false
+    }, 300)
+  }, [isBuilding])
   
   // Set up initial position
   useEffect(() => {
@@ -32,12 +67,22 @@ export const Player = ({ setMenuOpen }: { setMenuOpen: (isOpen: boolean) => void
     }
     // If we're exiting building mode, lock the pointer
     else if (!isBuilding && !document.pointerLockElement) {
-      const canvas = document.querySelector('canvas')
-      if (canvas) {
-        canvas.requestPointerLock()
-      }
+      grabMousePointer()
     }
-  }, [isBuilding])
+  }, [isBuilding, grabMousePointer])
+  
+  // Listen for menu state changes
+  useEffect(() => {
+    // When menu is closed, set flag to prevent immediate reopening
+    if (!menuOpen) {
+      menuJustClosedRef.current = true
+      
+      // Extended cooldown period
+      setTimeout(() => {
+        menuJustClosedRef.current = false
+      }, 1000); // 1 second cooldown before menu can reopen
+    }
+  }, [menuOpen]);
   
   // Set up mouse look controls and handle pointer lock
   useEffect(() => {
@@ -46,35 +91,41 @@ export const Player = ({ setMenuOpen }: { setMenuOpen: (isOpen: boolean) => void
     
     const euler = new THREE.Euler(0, 0, 0, 'YXZ')
     
-    // Try to lock pointer immediately for non-building mode
-    const tryLockPointer = () => {
-      if (!document.pointerLockElement && canvas && shouldLockPointer.current) {
-        canvas.requestPointerLock()
+    // Handle any user input as a chance to grab pointer
+    const onUserInteraction = () => {
+      // Only try to grab if menu is closed and pointer isn't locked
+      if (!menuOpen && shouldLockPointer.current && !document.pointerLockElement) {
+        grabMousePointer()
       }
     }
     
-    const lockPointer = () => {
-      // Only lock when not in building mode
-      if (!document.pointerLockElement && shouldLockPointer.current) {
-        canvas.requestPointerLock()
-      }
-    }
-    
+    // Completely rethink how we handle pointer lock changes
     const onPointerLockChange = () => {
       const isLocked = document.pointerLockElement === canvas
       
-      // Only show the menu if we're not in building mode and pointer is unlocked
-      if (!isBuilding) {
-        setMenuOpen(!isLocked)
-      }
+      // If we're in building mode, ignore pointer lock changes for menu
+      if (isBuilding) return;
       
-      // When menu is closed (pointer is locked), hide the menu
+      // Case 1: Pointer is now locked
       if (isLocked) {
-        setMenuOpen(false)
+        // Always close menu when pointer is locked
+        if (menuOpen) {
+          isManuallyClosingMenuRef.current = true;
+          setMenuOpen(false);
+          setTimeout(() => { isManuallyClosingMenuRef.current = false; }, 100);
+        }
+      } 
+      // Case 2: Pointer is now unlocked 
+      else {
+        // Only open menu if this wasn't triggered by a manual close
+        // and we're not in the cooldown period
+        if (!isManuallyClosingMenuRef.current && !menuJustClosedRef.current) {
+          setMenuOpen(true);
+        }
       }
     }
     
-    const onMouseMove = (event: MouseEvent) => {
+    const onMouseMove = (event: globalThis.MouseEvent) => {
       if (document.pointerLockElement !== canvas) return
       
       const sensitivity = 0.002
@@ -89,22 +140,23 @@ export const Player = ({ setMenuOpen }: { setMenuOpen: (isOpen: boolean) => void
       camera.quaternion.setFromEuler(euler)
     }
     
-    // Try to lock immediately if not in building mode
-    if (shouldLockPointer.current) {
-      setTimeout(tryLockPointer, 1000)
-    }
+    // Attempt to grab the pointer on any mouse or keyboard interaction
+    document.addEventListener('click', onUserInteraction, true)
+    document.addEventListener('keydown', onUserInteraction, true)
+    document.addEventListener('mousedown', onUserInteraction, true)
     
     // Set up event listeners
-    canvas.addEventListener('click', lockPointer)
     document.addEventListener('pointerlockchange', onPointerLockChange)
     document.addEventListener('mousemove', onMouseMove)
     
     return () => {
-      canvas.removeEventListener('click', lockPointer)
+      document.removeEventListener('click', onUserInteraction, true)
+      document.removeEventListener('keydown', onUserInteraction, true)
+      document.removeEventListener('mousedown', onUserInteraction, true)
       document.removeEventListener('pointerlockchange', onPointerLockChange)
       document.removeEventListener('mousemove', onMouseMove)
     }
-  }, [camera, setMenuOpen, isBuilding])
+  }, [camera, setMenuOpen, isBuilding, grabMousePointer, menuOpen])
   
   // Handle keyboard movement
   useFrame((state, delta) => {
