@@ -1,0 +1,104 @@
+.element-selector {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  z-index: 100;
+}
+
+.toggle-building {
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: 2px solid white;
+  padding: 10px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Arial', sans-serif;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.toggle-building.active {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: #4FACFE;
+  box-shadow: 0 0 15px #4FACFE;
+}
+
+.toggle-building:hover {
+  background-color: rgba(79, 172, 254, 0.3);
+}
+
+.elements-container {
+  margin-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.element-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 40px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.element-item:hover {
+  transform: scale(1.05);
+}
+
+.element-item.selected {
+  transform: scale(1.1);
+  box-shadow: 0 0 15px currentColor;
+}
+
+.element-name {
+  color: white;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+  font-weight: bold;
+  font-family: 'Arial', sans-serif;
+}
+
+.lock-pointer {
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: 2px solid #4FACFE;
+  padding: 10px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Arial', sans-serif;
+  font-size: 14px;
+  margin-top: 15px;
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+.lock-pointer:hover {
+  background-color: rgba(79, 172, 254, 0.3);
+  transform: translateY(-2px);
+}
+
+.building-hint {
+  margin-top: 15px;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 10px 15px;
+  border-radius: 8px;
+  color: white;
+  font-family: 'Arial', sans-serif;
+  font-size: 12px;
+}
+
+.building-hint p {
+  margin: 5px 0;
+} 
