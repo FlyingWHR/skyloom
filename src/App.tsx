@@ -3,6 +3,7 @@ import { Scene } from './components/game/Scene'
 import { HUD } from './components/ui/HUD'
 import { ElementSelector } from './components/ui/ElementSelector'
 import { OptionsMenu } from './components/ui/OptionsMenu'
+import { Crosshair } from './components/ui/Crosshair'
 import './App.css'
 
 function App() {
@@ -59,6 +60,7 @@ function App() {
       {/* UI elements */}
       {!menuOpen && <HUD />}
       {!menuOpen && <ElementSelector />}
+      {!menuOpen && <Crosshair />}
       
       {/* Options menu */}
       <OptionsMenu isVisible={menuOpen} onResume={handleResumeGame} />

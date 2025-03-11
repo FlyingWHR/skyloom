@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber'
 import { Environment } from './Environment'
-import { Island } from './Island'
+import { World } from './World'
 import { Player } from './Player'
 import { BuildingSystem } from './BuildingSystem'
 
@@ -19,8 +19,8 @@ export const Scene = ({ setMenuOpen, menuOpen }: SceneProps) => {
       {/* Environment with stylized skybox */}
       <Environment />
       
-      {/* Floating island */}
-      <Island />
+      {/* Voxel world */}
+      <World renderDistance={3} seed={12345} />
       
       {/* Building System */}
       <BuildingSystem />

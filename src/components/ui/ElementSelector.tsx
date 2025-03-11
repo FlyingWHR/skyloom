@@ -1,60 +1,73 @@
-import React from 'react'
-import { ElementType, ELEMENT_PROPERTIES } from '../../systems/elements/elementTypes'
+import { useState, useEffect } from 'react'
 import { useBuildingStore } from '../../systems/building/buildingState'
+import { ElementType, ELEMENT_PROPERTIES } from '../../systems/elements/elementTypes'
 import '../../styles/ElementSelector.css'
 
 export const ElementSelector = () => {
-  const { isBuilding, selectedElement, setSelectedElement, toggleBuilding } = useBuildingStore()
+  const { isBuilding, selectedElement, selectElement } = useBuildingStore()
+  const [activeHotbarSlot, setActiveHotbarSlot] = useState(0)
   
-  // Function to lock pointer for building
-  const lockPointerForBuilding = () => {
-    const canvas = document.querySelector('canvas')
-    if (canvas && !document.pointerLockElement) {
-      canvas.requestPointerLock()
+  // Map hotbar slots to element types
+  const hotbarElements = [
+    ElementType.WOOD,
+    ElementType.EARTH,
+    ElementType.METAL,
+    ElementType.FIRE,
+    ElementType.WATER
+  ]
+  
+  // Handle keyboard number keys for hotbar selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Number keys 1-9
+      if (e.key >= '1' && e.key <= '5') {
+        const slot = parseInt(e.key) - 1
+        setActiveHotbarSlot(slot)
+        selectElement(hotbarElements[slot])
+      }
     }
-  }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [hotbarElements, selectElement])
+  
+  // If not in building mode, don't show the selector
+  if (!isBuilding) return null
   
   return (
-    <div className={`element-selector ${isBuilding ? 'active' : ''}`}>
-      <button 
-        className={`toggle-building ${isBuilding ? 'active' : ''}`}
-        onClick={toggleBuilding}
-      >
-        {isBuilding ? 'Exit Building Mode' : 'Enter Building Mode'}
-      </button>
-      
-      {isBuilding && (
-        <>
-          <div className="elements-container">
-            {Object.values(ElementType).map((element) => (
-              <div
-                key={element}
-                className={`element-item ${selectedElement === element ? 'selected' : ''}`}
-                onClick={() => setSelectedElement(element)}
+    <div className="element-selector-container">
+      {/* Minecraft-style hotbar */}
+      <div className="hotbar">
+        {hotbarElements.map((element, index) => {
+          const properties = ELEMENT_PROPERTIES[element]
+          return (
+            <div 
+              key={element} 
+              className={`hotbar-slot ${index === activeHotbarSlot ? 'active' : ''}`}
+              onClick={() => {
+                setActiveHotbarSlot(index)
+                selectElement(element)
+              }}
+              style={{
+                borderColor: index === activeHotbarSlot ? properties.color : undefined
+              }}
+            >
+              <div 
+                className="element-block" 
                 style={{
-                  backgroundColor: ELEMENT_PROPERTIES[element].color,
-                  boxShadow: `0 0 10px ${ELEMENT_PROPERTIES[element].emissive}`
+                  backgroundColor: properties.color,
+                  boxShadow: `inset 0 0 15px ${properties.emissive}` 
                 }}
-              >
-                <span className="element-name">{ELEMENT_PROPERTIES[element].name}</span>
-              </div>
-            ))}
-          </div>
-          
-          <button 
-            className="lock-pointer"
-            onClick={lockPointerForBuilding}
-          >
-            Lock View (Click to Build)
-          </button>
-          
-          <div className="building-hint">
-            <p>• Select an element above</p>
-            <p>• Click "Lock View" to build</p>
-            <p>• Press ESC to edit elements</p>
-          </div>
-        </>
-      )}
+              ></div>
+              <span className="slot-number">{index + 1}</span>
+            </div>
+          )
+        })}
+      </div>
+      
+      <div className="element-info">
+        <h3>{ELEMENT_PROPERTIES[selectedElement].name}</h3>
+      </div>
     </div>
   )
 } 

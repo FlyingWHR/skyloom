@@ -16,15 +16,16 @@ export const Island = () => {
     }
   }, []);
 
+  // Extremely subtle animation - practically imperceptible but still provides some movement
   useFrame(({ clock }) => {
     if (islandRef.current) {
-      // Gentle floating animation
-      islandRef.current.position.y = Math.sin(clock.getElapsedTime() * 0.3) * 0.5
+      // Extremely small amplitude and very slow frequency
+      islandRef.current.position.y = Math.sin(clock.getElapsedTime() * 0.05) * 0.1;
     }
   })
 
   return (
-    <group ref={islandRef}>
+    <group ref={islandRef} position={[0, 0, 0]}>
       {/* Base island */}
       <mesh receiveShadow castShadow position={[0, 0, 0]}>
         <cylinderGeometry args={[8, 10, 2, 6]} />

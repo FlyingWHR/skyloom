@@ -1,3 +1,85 @@
+/* Element selector container */
+.element-selector-container {
+  position: fixed;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Minecraft-style hotbar */
+.hotbar {
+  display: flex;
+  background-color: rgba(0, 0, 0, 0.5);
+  border: 2px solid #555;
+  border-radius: 5px;
+  padding: 5px;
+  gap: 5px;
+  pointer-events: auto;
+}
+
+.hotbar-slot {
+  width: 50px;
+  height: 50px;
+  background-color: rgba(40, 40, 40, 0.7);
+  border: 2px solid #666;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.1s;
+}
+
+.hotbar-slot:hover {
+  transform: translateY(-2px);
+}
+
+.hotbar-slot.active {
+  border-color: #fff;
+  transform: translateY(-3px);
+}
+
+.element-block {
+  width: 34px;
+  height: 34px;
+  border-radius: 3px;
+}
+
+.slot-number {
+  position: absolute;
+  bottom: 2px;
+  right: 5px;
+  color: #ccc;
+  font-family: 'Arial', sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* Element info display */
+.element-info {
+  margin-top: 10px;
+  padding: 5px 15px;
+  background-color: rgba(0, 0, 0, 0.4);
+  border-radius: 15px;
+  color: white;
+  pointer-events: none;
+  text-align: center;
+}
+
+.element-info h3 {
+  margin: 0;
+  font-family: 'Arial', sans-serif;
+  font-size: 16px;
+  font-weight: normal;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.7);
+}
+
 .element-selector {
   position: absolute;
   top: 20px;

@@ -57,17 +57,28 @@ export const OptionsMenu = ({ isVisible, onResume }: OptionsMenuProps) => {
         
         <div className="controls-help">
           <h3>Controls</h3>
-          <p>WASD: Movement</p>
+          <p>WASD: Move in current direction</p>
           <p>Mouse: Look around</p>
-          <p>Space: Move Up</p>
-          <p>Shift: Move Down</p>
-          <p>F: Speed boost</p>
+          <p>F: Toggle Fly/Walk Mode</p>
+          <p>Space: Jump (in walk mode)</p>
+          <p>Shift+WASD: Run faster</p>
+          
+          <h4>Flying Controls</h4>
+          <p>E or Space: Move Up</p>
+          <p>Q or Ctrl: Move Down</p>
+          <p>Hold movement keys to accelerate</p>
+          
+          <h4>Building</h4>
           <p>B: Toggle building mode</p>
+          <p>1-9: Select element type</p>
           <p>ESC: Show this menu</p>
+          
           {isBuilding && (
             <>
+              <h4>Building Actions</h4>
               <p>Left Click: Place block</p>
               <p>Right Click: Remove block</p>
+              <p>Mouse Wheel: Change selected element</p>
             </>
           )}
         </div>

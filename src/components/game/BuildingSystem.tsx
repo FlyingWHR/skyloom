@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useBuildingStore } from '../../systems/building/buildingState'
@@ -6,6 +6,40 @@ import { useBlockStore } from '../../systems/building/blockStore'
 import { snapToGrid } from '../../systems/building/gridSystem'
 import { ElementBlock } from './ElementBlock'
 import { ElementType, ELEMENT_PROPERTIES } from '../../systems/elements/elementTypes'
+import { Html } from '@react-three/drei'
+
+// Custom shader for ghost blocks that includes fresnel effect for edge highlighting
+const createGhostShaderMaterial = (color: string) => {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(color) },
+      opacity: { value: 0.5 }
+    },
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+      
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float opacity;
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+      
+      void main() {
+        // Simple shading
+        gl_FragColor = vec4(color, opacity);
+      }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide
+  });
+};
 
 // Extended Vector3 type with userData
 interface ExtendedVector3 extends THREE.Vector3 {
@@ -34,6 +68,11 @@ export const BuildingSystem = () => {
   
   // Visual rendering position (smoothed)
   const [smoothPosition, setSmoothPosition] = useState<ExtendedVector3 | null>(null)
+  
+  // Create the custom shader material once
+  const ghostMaterial = useMemo(() => {
+    return createGhostShaderMaterial(ELEMENT_PROPERTIES[selectedElement].color)
+  }, [selectedElement]);
   
   // Find and store reference to the island
   useEffect(() => {
@@ -79,56 +118,140 @@ export const BuildingSystem = () => {
     }
   }, [scene]);
   
-  // Handle mouse events for building
+  // Function to get the world manager from the window object (added by World component)
+  const getWorldManager = () => {
+    return (window as any).worldManager || null;
+  }
+  
+  // Update ghost block position based on raycaster
+  useFrame(() => {
+    if (!isBuilding) return;
+    
+    // Skip if not enough time has passed since last update
+    const now = performance.now();
+    if (now - lastUpdateTime.current < 50) return;
+    lastUpdateTime.current = now;
+    
+    // Get world manager
+    const worldManager = getWorldManager();
+    if (!worldManager) return;
+
+    // Cast ray from camera
+    raycaster.setFromCamera(new THREE.Vector2(), camera);
+    
+    // Find intersections with objects in the scene
+    const intersects = raycaster.intersectObjects(scene.children, true);
+    
+    // Filter out intersections with ghost block
+    const filteredIntersects = intersects.filter(intersect => {
+      return !intersect.object.userData.isGhost;
+    });
+    
+    if (filteredIntersects.length > 0) {
+      const intersect = filteredIntersects[0];
+      
+      // Get intersection point
+      const point = intersect.point.clone();
+      
+      // Offset based on normal for placement
+      const norm = intersect.normal ? intersect.normal.clone() : new THREE.Vector3(0, 1, 0);
+      
+      // Calculate grid position for the block
+      const pos = snapToGrid(point.add(norm.multiplyScalar(0.5)));
+      
+      // Create extended vector with userData
+      const extendedPos = pos as ExtendedVector3;
+      extendedPos.userData = { onIsland: true };
+      
+      // Store normal for placement
+      lastNormal.current = intersect.normal ? intersect.normal.clone() : new THREE.Vector3(0, 1, 0);
+      
+      // Check if we can place a block here
+      const blockAtPosition = worldManager.getBlockAt(pos.x, pos.y, pos.z);
+      canPlace.current = blockAtPosition === null || blockAtPosition?.id === ElementType.WOOD;
+      
+      // Update ghost block position
+      targetPosition.current = extendedPos;
+      
+      // Count stable position frames
+      if (lastPosition.current && lastPosition.current.equals(pos)) {
+        stableCounter.current++;
+      } else {
+        stableCounter.current = 0;
+        lastPosition.current = pos.clone();
+      }
+      
+      // Only update ghost position when stable for a few frames
+      if (stableCounter.current > 2) {
+        setGhostPosition(extendedPos);
+      }
+    } else {
+      // No intersection, hide ghost block
+      lastNormal.current = null;
+      targetPosition.current = null;
+      setGhostPosition(null);
+    }
+  });
+  
+  // Handle mouse clicks for block placement/removal
   useEffect(() => {
-    if (!isBuilding) return
+    if (!isBuilding) return;
     
-    const handleClick = () => {
-      // Use the stable position for placing blocks
-      // Only place blocks when pointer is locked to avoid conflict with UI interactions
-      if (targetPosition.current && canPlace.current && document.pointerLockElement && stableCounter.current > 5) {
-        // If placing on the island, compensate for island animation
-        let placementPosition = targetPosition.current.clone() as ExtendedVector3;
-        
-        // Add the block using the compensated position
-        addBlock(placementPosition, selectedElement)
-        
-        // Add cooldown to prevent multiple placements
-        canPlace.current = false
-        setTimeout(() => {
-          canPlace.current = true
-        }, 250)
+    const handleMouseDown = (event: MouseEvent) => {
+      // Skip if no position is selected
+      if (!ghostPosition || !canPlace.current) return;
+      
+      // Get world manager
+      const worldManager = getWorldManager();
+      if (!worldManager) return;
+      
+      // Left click: Place block
+      if (event.button === 0) {
+        worldManager.setBlockAt(
+          ghostPosition.x,
+          ghostPosition.y,
+          ghostPosition.z,
+          selectedElement
+        );
       }
-    }
-    
-    const handleRightClick = (e: MouseEvent) => {
-      e.preventDefault()
-      // Check if we're hitting an existing block and remove it
-      if (isBuilding && document.pointerLockElement) {
-        raycaster.setFromCamera(new THREE.Vector2(0, 0), camera)
-        const intersects = raycaster.intersectObjects(scene.children, true)
+      
+      // Right click: Remove block
+      if (event.button === 2 && lastNormal.current) {
+        // Calculate position of the block we're looking at (not the ghost block)
+        const blockPos = ghostPosition.clone().sub(lastNormal.current);
         
-        if (intersects.length > 0) {
-          const point = intersects[0].point
-          const snappedPoint = snapToGrid(point)
-          removeBlockAtPosition(snappedPoint)
-          
-          // Reset state after removal to prevent glitching
-          lastIntersectedObject.current = null;
-          lastNormal.current = null;
-          stableCounter.current = 0;
-        }
+        worldManager.removeBlockAt(
+          blockPos.x,
+          blockPos.y,
+          blockPos.z
+        );
       }
-    }
+    };
     
-    window.addEventListener('click', handleClick)
-    window.addEventListener('contextmenu', handleRightClick)
+    // Prevent context menu on right click
+    const handleContextMenu = (event: Event) => {
+      event.preventDefault();
+    };
     
+    // Add event listeners
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('contextmenu', handleContextMenu);
+    
+    // Clean up
     return () => {
-      window.removeEventListener('click', handleClick)
-      window.removeEventListener('contextmenu', handleRightClick)
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [isBuilding, ghostPosition, selectedElement, canPlace]);
+  
+  // Smooth the position updates for ghost block
+  useEffect(() => {
+    if (ghostPosition) {
+      setSmoothPosition(ghostPosition.clone());
+    } else {
+      setSmoothPosition(null);
     }
-  }, [isBuilding, selectedElement, addBlock, removeBlockAtPosition, camera, raycaster, scene])
+  }, [ghostPosition]);
   
   // Get the current island Y-offset from animation
   const getIslandYOffset = () => {
@@ -163,171 +286,6 @@ export const BuildingSystem = () => {
     return normal;
   };
   
-  // Update ghost block position based on raycasting
-  useFrame(({ clock }) => {
-    // Only show ghost in building mode
-    if (!isBuilding) {
-      setGhostPosition(null)
-      setSmoothPosition(null)
-      targetPosition.current = null;
-      lastPosition.current = null;
-      lastIntersectedObject.current = null;
-      lastNormal.current = null;
-      stableCounter.current = 0;
-      return
-    }
-    
-    // In building mode, we can raycast even without pointer lock
-    // Only skip raycasting if not in building mode and pointer isn't locked
-    if (!isBuilding && !document.pointerLockElement) return
-    
-    // In building mode without pointer lock, we'll use a ray from the center of the screen
-    // regardless of where the mouse is (UI interactions are handled separately)
-    
-    const currentTime = clock.getElapsedTime()
-    // Limit update frequency to reduce flickering (debounce)
-    if (currentTime - lastUpdateTime.current < 0.1) {
-      // Still update smooth position even during debounce
-      if (targetPosition.current && smoothPosition) {
-        // Get current animation offset
-        const yOffset = getIslandYOffset();
-        
-        // If we have a non-null target position, add the current island Y-offset
-        const adjustedTarget = targetPosition.current.clone() as ExtendedVector3;
-        if (isIslandChild(targetPosition.current)) {
-          adjustedTarget.y += yOffset;
-        }
-        
-        const newSmoothPos = smoothPosition.clone().lerp(adjustedTarget, 0.3) as ExtendedVector3;
-        setSmoothPosition(newSmoothPos);
-      }
-      return;
-    }
-    
-    // Cast ray from center of screen
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera)
-    
-    // First check if we hit any existing blocks
-    const allObjects = scene.children;
-    
-    // Get all objects that are marked as element blocks
-    const elementBlocks = allObjects.filter(obj => 
-      obj.userData?.type === 'elementBlock'
-    );
-    
-    const blocks = scene.children.filter(obj => 
-      obj.userData?.type === 'elementBlock' || 
-      (obj.userData?.type === 'island') ||
-      obj === islandRef.current
-    );
-    
-    const intersects = raycaster.intersectObjects(blocks.length > 0 ? blocks : allObjects, true);
-    
-    if (intersects.length > 0) {
-      const intersection = intersects[0];
-      
-      // Don't place blocks too far away
-      if (intersection.distance > 30) {
-        if (ghostPosition) {
-          setGhostPosition(null);
-          setSmoothPosition(null);
-          targetPosition.current = null;
-          stableCounter.current = 0;
-        }
-        return;
-      }
-      
-      // Get a stable normal
-      const normal = getStableNormal(intersection);
-      
-      // Position offset by normal with a slightly smaller offset to reduce floating
-      const position = intersection.point.clone().add(normal.multiplyScalar(0.5));
-      const snappedPosition = snapToGrid(position) as ExtendedVector3;
-      
-      // Check if we're intersecting with the island or a child of the island
-      const isTargetOnIsland = isIslandIntersection(intersection);
-      
-      // Store if the target is on the island for later use
-      if (isTargetOnIsland) {
-        // Initialize userData if it doesn't exist
-        if (!snappedPosition.userData) {
-          snappedPosition.userData = {};
-        }
-        snappedPosition.userData.onIsland = true;
-      }
-      
-      // Calculate position in island local space to stabilize it
-      let stablePosition = snappedPosition.clone() as ExtendedVector3;
-      if (isTargetOnIsland && islandRef.current) {
-        // Subtract current island animation offset to get a stable position
-        const yOffset = getIslandYOffset();
-        stablePosition.y -= yOffset;
-      }
-      
-      // Check if position has changed significantly (using the stable position)
-      if (!lastPosition.current || 
-          lastPosition.current.distanceTo(stablePosition) > 0.1) {
-        
-        stableCounter.current = 0;
-        
-        // Check if position is already occupied
-        const isOccupied = blocks.some(block => 
-          block.userData?.type === 'elementBlock' &&
-          Math.abs(block.position.x - stablePosition.x) < 0.1 && 
-          Math.abs(block.position.y - stablePosition.y) < 0.1 && 
-          Math.abs(block.position.z - stablePosition.z) < 0.1
-        );
-        
-        if (!isOccupied) {
-          // Store the stable position as target
-          targetPosition.current = stablePosition.clone() as ExtendedVector3;
-          lastPosition.current = stablePosition.clone() as ExtendedVector3;
-          lastUpdateTime.current = currentTime;
-          
-          // Initialize smooth position if not set
-          if (!smoothPosition) {
-            setSmoothPosition(snappedPosition.clone() as ExtendedVector3);
-          }
-          
-          // Only update the actual ghost position when we're stable
-          setGhostPosition(stablePosition);
-        } else {
-          if (ghostPosition) {
-            setGhostPosition(null);
-            setSmoothPosition(null);
-            targetPosition.current = null;
-          }
-        }
-      } else {
-        // Position is stable
-        stableCounter.current++;
-        
-        // Gradually update smooth position to match target + current island offset
-        if (targetPosition.current && smoothPosition) {
-          // Get current animation offset
-          const yOffset = getIslandYOffset();
-          
-          // If we have a non-null target position, add the current island Y-offset
-          const adjustedTarget = targetPosition.current.clone() as ExtendedVector3;
-          if (isIslandChild(targetPosition.current)) {
-            adjustedTarget.y += yOffset;
-          }
-          
-          const newSmoothPos = smoothPosition.clone().lerp(adjustedTarget, 0.3) as ExtendedVector3;
-          setSmoothPosition(newSmoothPos);
-        }
-      }
-    } else {
-      // Only clear if we had a position before
-      if (ghostPosition) {
-        setGhostPosition(null);
-        setSmoothPosition(null);
-        targetPosition.current = null;
-        stableCounter.current = 0;
-      }
-    }
-  })
-  
   // Helper function to check if a position is on the island
   const isIslandChild = (position: ExtendedVector3) => {
     return position.userData?.onIsland === true;
@@ -349,28 +307,89 @@ export const BuildingSystem = () => {
     return false;
   };
   
+  // Update camera position in the shader uniforms
+  useFrame(({ camera }) => {
+    if (ghostMaterial && ghostMaterial.uniforms && isBuilding && smoothPosition) {
+      ghostMaterial.uniforms.camPos.value.copy(camera.position);
+    }
+  });
+  
+  // Create efficient ghost block with minimal overhead
+  const createEfficientGhostBlock = () => {
+    // Skip if not building or no position
+    if (!isBuilding || !smoothPosition) return null;
+    
+    const elementColor = ELEMENT_PROPERTIES[selectedElement].color;
+    
+    return (
+      <group position={[smoothPosition.x, smoothPosition.y, smoothPosition.z]}>
+        {/* Simple semi-transparent cube - basic approach */}
+        <mesh>
+          <boxGeometry args={[0.98, 0.98, 0.98]} />
+          <meshStandardMaterial
+            color={elementColor}
+            opacity={0.5}
+            transparent={true}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        
+        {/* Wireframe outline for clarity */}
+        <lineSegments>
+          <edgesGeometry args={[new THREE.BoxGeometry(1.01, 1.01, 1.01)]} />
+          <lineBasicMaterial
+            color="#FFFFFF"
+          />
+        </lineSegments>
+        
+        {/* ONLY add extra elements for the problematic sides */}
+        
+        {/* Extra back face outline with high visibility */}
+        <line>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              array={new Float32Array([
+                -0.51, -0.51, -0.51,  // back bottom-left
+                0.51, -0.51, -0.51,   // back bottom-right
+                0.51, 0.51, -0.51,    // back top-right
+                -0.51, 0.51, -0.51,   // back top-left
+                -0.51, -0.51, -0.51   // back to bottom-left to close
+              ])}
+              count={5}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#FFFFFF" />
+        </line>
+        
+        {/* Extra left face outline with high visibility */}
+        <line>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              array={new Float32Array([
+                -0.51, -0.51, -0.51,  // back bottom-left
+                -0.51, 0.51, -0.51,   // back top-left
+                -0.51, 0.51, 0.51,    // front top-left
+                -0.51, -0.51, 0.51,   // front bottom-left
+                -0.51, -0.51, -0.51   // back to bottom-left to close
+              ])}
+              count={5}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#FFFFFF" />
+        </line>
+      </group>
+    );
+  };
+  
   // Render ghost block and actual blocks
   return (
     <>
-      {/* Ghost block - using smooth position for visual rendering */}
-      {isBuilding && smoothPosition && (
-        <mesh
-          position={[smoothPosition.x, smoothPosition.y, smoothPosition.z]}
-          renderOrder={1} // Ensure ghost renders on top
-        >
-          <boxGeometry args={[0.98, 0.98, 0.98]} /> {/* Slightly smaller to avoid z-fighting */}
-          <meshStandardMaterial
-            color={ELEMENT_PROPERTIES[selectedElement].color}
-            emissive={ELEMENT_PROPERTIES[selectedElement].emissive}
-            emissiveIntensity={0.5}
-            transparent={true}
-            opacity={0.7}
-            depthTest={true}
-            depthWrite={false} // Prevent depth fighting
-            side={THREE.FrontSide}
-          />
-        </mesh>
-      )}
+      {/* Efficient ghost block */}
+      {createEfficientGhostBlock()}
       
       {/* Actual blocks */}
       {blocks.map((block) => (
